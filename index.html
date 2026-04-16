@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Finanças Casal</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="loginScreen" class="overlay">
+      <div class="login-card">
+        <h1>Quem é você?</h1>
+        <div class="user-selection">
+          <button onclick="fazerLogin('Eu')">Eu</button>
+          <button onclick="fazerLogin('Namorada')">Namorada</button>
+        </div>
+      </div>
+    </div>
+
+    <header class="main-header" id="appHeader" style="display: none">
+      <div class="user-bar">
+        <span>Usuário: <strong id="userNameDisplay"></strong></span>
+        <button onclick="logout()" class="btn-logout">Sair</button>
+      </div>
+
+      <div class="header-content">
+        <div class="balance-card">
+          <small>SALDO TOTAL</small>
+          <h2 id="saldoBancarioHeader">R$ 0,00</h2>
+        </div>
+        <div class="balance-card individual">
+          <small>MEU SALDO</small>
+          <h2 id="meuSaldoIndividual">R$ 0,00</h2>
+        </div>
+      </div>
+
+      <div class="alimen-header">
+        <small>SALDO VA (CONJUNTO): </small>
+        <strong id="saldoVAHeader">R$ 0,00</strong>
+      </div>
+
+      <details class="income-settings">
+        <summary>Ajustar Minha Renda</summary>
+        <div class="grid-inputs">
+          <input
+            type="number"
+            id="minhaRendaBancaria"
+            placeholder="Renda Banco"
+            oninput="salvarRendaIndividual()"
+          />
+          <input
+            type="number"
+            id="meuRendaVA"
+            placeholder="Renda VA"
+            oninput="salvarRendaIndividual()"
+          />
+        </div>
+      </details>
+    </header>
+
+    <div class="container" id="appContent" style="display: none">
+      <nav class="tabs">
+        <button class="tab-btn active" onclick="abrirAba('geral')">
+          Geral
+        </button>
+        <button class="tab-btn" onclick="abrirAba('fixas')">Fixas</button>
+        <button class="tab-btn" onclick="abrirAba('mercado')">Mercado</button>
+        <button class="tab-btn" onclick="abrirAba('historico')">
+          Histórico
+        </button>
+      </nav>
+
+      <div id="geral" class="tab-content active">
+        <div class="form-grupo">
+          <input type="text" id="descVar" placeholder="O que comprou?" />
+          <input type="number" id="valVar" placeholder="Valor R$" />
+          <button onclick="addGasto('variavel')">Adicionar Gasto</button>
+        </div>
+        <ul id="listaVariavel" class="lista"></ul>
+      </div>
+
+      <div id="fixas" class="tab-content">
+        <div class="card">
+          <h3>Minhas Metades</h3>
+          <div id="listaFixas"></div>
+        </div>
+      </div>
+
+      <div id="mercado" class="tab-content">
+        <div class="form-grupo">
+          <input type="text" id="descMerc" placeholder="Local (Mercado...)" />
+          <input type="number" id="valMerc" placeholder="Valor R$" />
+          <button onclick="addGasto('mercado')">Debitar VA</button>
+        </div>
+        <ul id="listaMercado" class="lista"></ul>
+      </div>
+
+      <div id="historico" class="tab-content">
+        <div class="card">
+          <h3>Linha do Tempo</h3>
+          <div id="timeline" class="timeline-container"></div>
+        </div>
+      </div>
+
+      <button onclick="limparTudo()" class="btn-clear">Resetar Mês</button>
+    </div>
+    <script src="main.js"></script>
+  </body>
+</html>

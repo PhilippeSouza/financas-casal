@@ -9,18 +9,23 @@
 <body>
     <div id="loginScreen" class="overlay">
         <div class="login-card">
-            <h1>Quem é você?</h1>
-            <div class="user-selection">
-                <button onclick="fazerLogin('Eu')">Eu</button>
-                <button onclick="fazerLogin('Namorada')">Namorada</button>
+            <h1>Entrar no Finanças</h1>
+            <div class="form-grupo">
+                <input type="email" id="loginEmail" placeholder="E-mail" />
+                <input type="password" id="loginSenha" placeholder="Senha" />
+                <button onclick="loginComEmail()">Entrar</button>
             </div>
+            <p id="loginErro" style="color: #ff4d4d; font-size: 12px; margin-top: 10px;"></p>
         </div>
     </div>
 
     <header class="main-header" id="appHeader" style="display: none">
         <div class="user-bar">
-            <span>Usuário: <strong id="userNameDisplay"></strong></span>
-            <button onclick="logout()" class="btn-logout">Sair</button>
+            <span>Olá, <strong id="userNameDisplay">...</strong></span>
+            <div class="header-btns">
+                <button onclick="abrirAba(event, 'perfil')" class="btn-icon">⚙️</button>
+                <button onclick="logout()" class="btn-logout">Sair</button>
+            </div>
         </div>
 
         <div class="month-selector">
@@ -44,19 +49,12 @@
             <small>SALDO VA (CONJUNTO): </small>
             <strong id="saldoVAHeader">R$ 0,00</strong>
         </div>
-
-        <details class="income-settings">
-            <summary>Ajustar Minha Renda</summary>
-            <div class="grid-inputs">
-                <input type="number" id="minhaRendaBancaria" placeholder="Renda Banco" oninput="salvarRendaIndividual()" />
-                <input type="number" id="meuRendaVA" placeholder="Renda VA" oninput="salvarRendaIndividual()" />
-            </div>
-        </details>
     </header>
 
     <div class="container" id="appContent" style="display: none">
         <nav class="tabs">
             <button class="tab-btn active" onclick="abrirAba(event, 'geral')">Geral</button>
+            <button class="tab-btn" onclick="abrirAba(event, 'entradas')">Entradas</button>
             <button class="tab-btn" onclick="abrirAba(event, 'fixas')">Fixas</button>
             <button class="tab-btn" onclick="abrirAba(event, 'mercado')">Mercado</button>
             <button class="tab-btn" onclick="abrirAba(event, 'historico')">Histórico</button>
@@ -64,40 +62,74 @@
 
         <div id="geral" class="tab-content active">
             <div class="form-grupo">
+                <h3>💸 Novo Gasto Geral</h3>
                 <input type="text" id="descVar" placeholder="O que comprou?" />
                 <input type="number" id="valVar" placeholder="Valor R$" />
                 <button onclick="addGasto('variavel')">Adicionar Gasto</button>
             </div>
-            <ul id="listaVariavel" class="lista"></ul>
+        </div>
+
+        <div id="entradas" class="tab-content">
+            <div class="form-grupo">
+                <h3>💰 Registrar Entrada</h3>
+                <input type="text" id="descEntrada" placeholder="Ex: Salário, Freelance" />
+                <input type="number" id="valEntrada" placeholder="Valor R$" />
+                <select id="tipoEntrada" class="select-field">
+                    <option value="banco">Conta Bancária</option>
+                    <option value="va">Vale Alimentação (VA)</option>
+                </select>
+                <button onclick="addEntrada()" style="background: #2ecc71;">Salvar Entrada</button>
+            </div>
         </div>
 
         <div id="fixas" class="tab-content">
             <div class="card">
-                <h3>Minhas Metades</h3>
+                <h3>📌 Minhas Metades</h3>
                 <div id="listaFixas"></div>
             </div>
         </div>
 
         <div id="mercado" class="tab-content">
             <div class="form-grupo">
+                <h3>🛒 Novo Gasto VA</h3>
                 <input type="text" id="descMerc" placeholder="Local (Mercado...)" />
                 <input type="number" id="valMerc" placeholder="Valor R$" />
                 <button onclick="addGasto('mercado')">Debitar VA</button>
             </div>
-            <ul id="listaMercado" class="lista"></ul>
         </div>
 
         <div id="historico" class="tab-content">
             <div class="card">
-                <h3>Linha do Tempo</h3>
-                <div id="timeline" class="timeline-container"></div>
+                <h3>💰 Entradas</h3>
+                <div id="timelineEntradas" class="timeline-container entry-style"></div>
+            </div>
+            <div class="card" style="margin-top: 20px;">
+                <h3>💸 Gastos Gerais</h3>
+                <div id="timelineGeral" class="timeline-container"></div>
+            </div>
+            <div class="card" style="margin-top: 20px;">
+                <h3>🛒 Mercado (VA)</h3>
+                <div id="timelineMercado" class="timeline-container va-style"></div>
             </div>
         </div>
 
-        <button onclick="limparTudo()" class="btn-clear">Resetar Mês Atual</button>
+        <div id="perfil" class="tab-content">
+            <div class="card">
+                <h3>👤 Meu Perfil</h3>
+                <p style="font-size: 12px; color: #666;">E-mail: <span id="displayEmail">...</span></p>
+                <div class="form-grupo">
+                    <label>Nome de Exibição:</label>
+                    <input type="text" id="inputNovoNome" placeholder="Seu Nome" />
+                    <button onclick="atualizarNomePerfil()">Salvar Nome</button>
+                </div>
+                <hr>
+                <button onclick="limparTudo()" class="btn-clear">Resetar Mês Atual</button>
+            </div>
+        </div>
     </div>
 
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <script src="main.js"></script>
 </body>

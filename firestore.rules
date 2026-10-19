@@ -1,0 +1,27 @@
+rules_version = '2';
+
+// Regras do Firestore do Finanças do Casal.
+// Publicar em: Console do Firebase > Firestore Database > Regras.
+// Troque UID_PESSOA_1 e UID_PESSOA_2 pelos UIDs das duas contas
+// (Console do Firebase > Authentication > Usuários > coluna "UID do usuário").
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Só as duas contas do casal leem e gravam; qualquer outra conta criada no projeto é bloqueada
+    function ehDoCasal() {
+      return request.auth != null
+        && request.auth.uid in ['UID_PESSOA_1', 'UID_PESSOA_2'];
+    }
+
+    // Um documento por mês, com id no formato AAAA-MM (ex.: 2026-10)
+    match /dados/{mes} {
+      allow read: if ehDoCasal();
+      allow write: if ehDoCasal() && mes.matches('^[0-9]{4}-[0-9]{2}$');
+    }
+
+    // Todo o resto fica fechado
+    match /{documento=**} {
+      allow read, write: if false;
+    }
+  }
+}

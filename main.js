@@ -92,8 +92,36 @@ function ativarOuvinteFirebase() {
     });
 }
 
-function salvarNaNuvem() {
-    db_nuvem.collection("dados").doc(obterIdMes(dataVisualizacao)).set({ db, statusFixas });
+function dadosPadrao() {
+    return { db: { variavel: [], mercado: [], entradas: [] }, statusFixas: { aluguel: { valor: 1000.0 }, internet: { valor: 109.99 } } };
+}
+
+// Lê a versão mais nova do mês na nuvem, aplica a mudança e grava tudo de uma vez (transação):
+// assim, se os dois lançarem ao mesmo tempo, um lançamento não apaga o do outro
+function mutarMes(mudanca) {
+    const ref = db_nuvem.collection("dados").doc(obterIdMes(dataVisualizacao));
+    return db_nuvem.runTransaction(async (t) => {
+        const snap = await t.get(ref);
+        const atual = snap.exists ? snap.data() : dadosPadrao();
+        const dados = {
+            db: { ...dadosPadrao().db, ...(atual.db || {}) },
+            statusFixas: atual.statusFixas || dadosPadrao().statusFixas
+        };
+        if (mudanca(dados) === false) return;
+        t.set(ref, dados);
+    }).catch(err => alert("Não foi possível salvar: " + err.message));
+}
+
+function novoId() {
+    return Date.now() + Math.floor(Math.random() * 1000) / 1000;
+}
+
+// Dono do registro pela conta (uid), que não muda quando alguém troca o nome no perfil.
+// Registros antigos, de antes do uid, continuam pelo nome.
+function ehDono(item) {
+    const u = auth.currentUser;
+    if (item.uid) return Boolean(u) && item.uid === u.uid;
+    return item.quem === usuarioLogadoNome;
 }
 
 // --- LANÇAMENTOS ---
@@ -102,8 +130,8 @@ function addEntrada() {
     const v = document.getElementById('valEntrada');
     const t = document.getElementById('tipoEntrada').value;
     if (!d.value || !v.value) return;
-    db.entradas.push({ id: Date.now(), desc: d.value, val: parseFloat(v.value), tipo: t, quem: usuarioLogadoNome, data: formatarData() });
-    salvarNaNuvem();
+    const item = { id: novoId(), desc: d.value, val: parseFloat(v.value), tipo: t, quem: usuarioLogadoNome, uid: auth.currentUser.uid, data: formatarData() };
+    mutarMes(dados => { dados.db.entradas.push(item); });
     d.value = ''; v.value = '';
 }
 
@@ -111,30 +139,53 @@ function addGasto(tipo) {
     const d = document.getElementById(tipo === 'variavel' ? 'descVar' : 'descMerc');
     const v = document.getElementById(tipo === 'variavel' ? 'valVar' : 'valMerc');
     if (!d.value || !v.value) return;
-    db[tipo].push({ id: Date.now(), desc: d.value, val: parseFloat(v.value), quem: usuarioLogadoNome, data: formatarData() });
-    salvarNaNuvem();
+    const item = { id: novoId(), desc: d.value, val: parseFloat(v.value), quem: usuarioLogadoNome, uid: auth.currentUser.uid, data: formatarData() };
+    mutarMes(dados => { dados.db[tipo].push(item); });
     d.value = ''; v.value = '';
 }
 
-function toggleFixo(c) {
-    if (!statusFixas[c]) statusFixas[c] = { valor: 1000 };
-    const st = !statusFixas[c][usuarioLogadoNome];
-    statusFixas[c][usuarioLogadoNome] = st;
-    const metade = statusFixas[c].valor / 2;
-    if (st) {
-        db.variavel.push({ id: Date.now(), desc: `FIXA: ${c.toUpperCase()}`, val: metade, quem: usuarioLogadoNome, data: formatarData(), isFixa: true, refFixo: c });
+// Conta fixa paga por esta pessoa: marcada pela conta (uid); marcações antigas eram pelo nome
+function fixaPaga(fixa) {
+    const uid = auth.currentUser && auth.currentUser.uid;
+    if (uid && uid in fixa) return Boolean(fixa[uid]);
+    return Boolean(fixa[usuarioLogadoNome]);
+}
+
+// Grava a marcação pela conta e apaga a antiga pelo nome (migra aos poucos, sem perder nada)
+function marcarFixa(fixa, chaveNome, uid, pago) {
+    if (uid) {
+        fixa[uid] = pago;
+        delete fixa[chaveNome];
     } else {
-        db.variavel = db.variavel.filter(g => !(g.refFixo === c && g.quem === usuarioLogadoNome && g.isFixa));
+        fixa[chaveNome] = pago;
     }
-    salvarNaNuvem();
+}
+
+function toggleFixo(c) {
+    const uid = auth.currentUser.uid;
+    mutarMes(dados => {
+        const fixas = dados.statusFixas;
+        if (!fixas[c]) fixas[c] = { valor: 1000 };
+        const st = !fixaPaga(fixas[c]);
+        marcarFixa(fixas[c], usuarioLogadoNome, uid, st);
+        const metade = fixas[c].valor / 2;
+        if (st) {
+            dados.db.variavel.push({ id: novoId(), desc: `FIXA: ${c.toUpperCase()}`, val: metade, quem: usuarioLogadoNome, uid, data: formatarData(), isFixa: true, refFixo: c });
+        } else {
+            dados.db.variavel = dados.db.variavel.filter(g => !(g.refFixo === c && g.isFixa && ehDono(g)));
+        }
+    });
 }
 
 function deletar(col, id) {
     const item = db[col].find(g => g.id === id);
-    if (!item || item.quem !== usuarioLogadoNome) { alert("Apenas o dono do registo pode excluir!"); return; }
-    if (item.isFixa) statusFixas[item.refFixo][item.quem] = false;
-    db[col] = db[col].filter(g => g.id !== id);
-    salvarNaNuvem();
+    if (!item || !ehDono(item)) { alert("Apenas o dono do registo pode excluir!"); return; }
+    mutarMes(dados => {
+        const atual = dados.db[col].find(g => g.id === id);
+        if (!atual || !ehDono(atual)) return false;
+        if (atual.isFixa && dados.statusFixas[atual.refFixo]) marcarFixa(dados.statusFixas[atual.refFixo], atual.quem, atual.uid, false);
+        dados.db[col] = dados.db[col].filter(g => g.id !== id);
+    });
 }
 
 // --- INTERFACE ---
@@ -159,18 +210,18 @@ function atualizarInterface() {
 
     const df = document.getElementById('listaFixas'); df.innerHTML = '';
     for (let c in statusFixas) {
-        const i = statusFixas[c], m = i.valor / 2, pago = i[usuarioLogadoNome] || false;
-        df.innerHTML += `<div class=\"fixa-row\"><span>${c.toUpperCase()} (R$ ${m})</span><button class=\"${pago?'pago':''}\" onclick=\"toggleFixo('${c}')\">${pago?'PAGO ✓':'MARCAR'}</button></div>`;
+        const i = statusFixas[c], m = i.valor / 2, pago = fixaPaga(i);
+        df.innerHTML += `<div class=\"fixa-row\"><span>${escaparHtml(c.toUpperCase())} (R$ ${m})</span><button class=\"${pago?'pago':''}\" onclick=\"toggleFixo('${escaparHtml(c)}')\">${pago?'PAGO ✓':'MARCAR'}</button></div>`;
     }
 
     const rendT = (id, lista, col) => {
         const el = document.getElementById(id); el.innerHTML = '';
         if (!lista || lista.length === 0) { el.innerHTML = '<p class=\"empty-msg\">Vazio</p>'; return; }
         lista.slice().reverse().forEach(ev => {
-            const btn = ev.quem === usuarioLogadoNome ? `<button class=\"btn-del-hist\" onclick=\"deletar('${col}', ${ev.id})\">x</button>` : '';
+            const btn = ehDono(ev) ? `<button class=\"btn-del-hist\" onclick=\"deletar('${col}', ${Number(ev.id)})\">x</button>` : '';
             el.innerHTML += `<div class=\"timeline-item ${ev.isFixa?'fixa-item':''} ${col==='mercado'?'va-item':''} ${col==='entradas'?'entry-item':''}\">
-                <div class=\"time\">${ev.data}</div>
-                <div class=\"details\"><strong>${ev.desc}</strong> - R$ ${ev.val.toFixed(2)}<br><small>Por: ${ev.quem}</small></div>
+                <div class=\"time\">${escaparHtml(ev.data)}</div>
+                <div class=\"details\"><strong>${escaparHtml(ev.desc)}</strong> - R$ ${ev.val.toFixed(2)}<br><small>Por: ${escaparHtml(ev.quem)}</small></div>
                 ${btn}
             </div>`;
         });
@@ -178,6 +229,11 @@ function atualizarInterface() {
     rendT('timelineEntradas', db.entradas, 'entradas');
     rendT('timelineGeral', db.variavel, 'variavel');
     rendT('timelineMercado', db.mercado, 'mercado');
+}
+
+// Texto digitado vira texto na tela, nunca código HTML
+function escaparHtml(texto) {
+    return String(texto ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 }
 
 function formatarData() {
